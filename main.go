@@ -41,7 +41,7 @@ const pwHashBytes = 64
 //		-- provider = tha
 //		-- country = na
 //		-- Confirmed = true
-var insertSql = "INSERT INTO public.user_test (" +
+var insertSql = "INSERT INTO public.user (" +
 	"u_id, display_name, email, password, salt, confirmed, birth, provider, " +
 	"transfer_user_no, transfer_user_id, permission, status, ip, country, " +
 	"create_at, update_at, confirmed_promotion)" +
