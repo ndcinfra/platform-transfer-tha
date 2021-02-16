@@ -117,7 +117,7 @@ func main() {
 func runAccountTransfer(th_dbconn, na_dbconn *pgx.Conn) {
 	// get the list from tha by orderby createdAt
 	// count: 70193
-	sql := "SELECT \"UID\" as u_id, email, displayname FROM \"user\" order by create_at asc"
+	sql := "SELECT \"UID\" as u_id, email, displayname FROM \"user\" where confirmed = true order by create_at asc"
 	thRows, err := th_dbconn.Query(context.Background(), sql)
 	if err != nil {
 		fmt.Printf("conn.Query failed: %v\n", err)
@@ -127,10 +127,13 @@ func runAccountTransfer(th_dbconn, na_dbconn *pgx.Conn) {
 
 	// loop
 	// var thaUsers []User
+	/*
+
+		var batchRowCount int
+		batch := &pgx.Batch{}
+		var preparedNAU PreparedNAUser
+	*/
 	totlaRowCount := 0
-	var batchRowCount int
-	batch := &pgx.Batch{}
-	var preparedNAU PreparedNAUser
 
 	for thRows.Next() {
 		var thu THUser
@@ -149,28 +152,58 @@ func runAccountTransfer(th_dbconn, na_dbconn *pgx.Conn) {
 
 		} else {
 			// fmt.Printf("%+v\n", thu)
+			// make password
+			// make salt
+			salt, err := generateSalt()
+			if err != nil {
+				fmt.Println("error make salt: ", err)
+				os.Exit(1)
+			}
+			hash, err := generatePassHash(generateRandStringLong(), salt)
+			if err != nil {
+				fmt.Println("error hash salt: ", err)
+				os.Exit(1)
+			}
+			_, err = na_dbconn.Exec(
+				context.Background(),
+				insertSql,
+				generateBigintID(),
+				generateRandString()+"_"+thu.Displayname,
+				strings.ToLower(thu.Email),
+				hash,
+				salt,
+				thu.UId,
+			)
+
+			if err != nil {
+				fmt.Println("error insert: ", err)
+				os.Exit(1)
+			}
 
 			// not exists.
 			// make bulk insert
 			//var preparedNAU PreparedNAUser
-			preparedNAUserInfo(&preparedNAU, thu)
+			/*
+				preparedNAUserInfo(&preparedNAU, thu)
 
-			fmt.Printf("%+v\n", preparedNAU)
+				fmt.Printf("%+v\n", preparedNAU)
 
-			// make bulk insert queue
-			batch.Queue(
-				insertSql,
-				preparedNAU.u_id,
-				preparedNAU.display_name,
-				preparedNAU.email,
-				preparedNAU.password,
-				preparedNAU.salt,
-				preparedNAU.transfer_id,
-			)
-			batchRowCount++
+				// make bulk insert queue
+				batch.Queue(
+					insertSql,
+					preparedNAU.u_id,
+					preparedNAU.display_name,
+					preparedNAU.email,
+					preparedNAU.password,
+					preparedNAU.salt,
+					preparedNAU.transfer_id,
+				)
+				batchRowCount++
+			*/
 		}
 
 		totlaRowCount++
+		fmt.Printf("count: %d, email: %s\n", totlaRowCount, thu.Email)
 	}
 
 	//for test
@@ -180,15 +213,17 @@ func runAccountTransfer(th_dbconn, na_dbconn *pgx.Conn) {
 	fmt.Printf("totlaRowCount: %d \n", totlaRowCount)
 
 	// bulk inserts
-	br := na_dbconn.SendBatch(context.Background(), batch)
-	for i := 0; i < batchRowCount; i++ {
-		ct, err := br.Exec()
-		if err != nil {
-			fmt.Println("bulk insert error:  ", i, err)
-		}
+	/*
+		br := na_dbconn.SendBatch(context.Background(), batch)
+		for i := 0; i < batchRowCount; i++ {
+			ct, err := br.Exec()
+			if err != nil {
+				fmt.Println("bulk insert error:  ", i, err)
+			}
 
-		fmt.Println("count: ", i, "result: ", ct.RowsAffected())
-	}
+			fmt.Println("count: ", i, "result: ", ct.RowsAffected())
+		}
+	*/
 
 	// make a backup file with whole THA user list
 }
@@ -197,7 +232,7 @@ func isExistEmail(thaUser THUser, na_dbconn *pgx.Conn) bool {
 	//check already exists toLower(email) both tha and na
 	// if already exists, insert confflit user table
 	// ex. where TRIM(BOTH FROM lower(email))= TRIM(BOTH FROM lower(' youngtip@gmail.com'));
-	fmt.Println(thaUser.Email)
+	// fmt.Println(thaUser.Email)
 
 	sql := "select u_id from public.user where TRIM(BOTH FROM lower(email))= TRIM(BOTH FROM lower('" + thaUser.Email + "'))"
 	rows, err := na_dbconn.Query(context.Background(), sql)
