@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gofrs/uuid"
 	"github.com/jackc/pgx/v4"
 	"github.com/joho/godotenv"
 	"golang.org/x/crypto/scrypt"
@@ -43,11 +44,11 @@ const pwHashBytes = 64
 //		-- Confirmed = true
 var insertSql = "INSERT INTO public.user (" +
 	"u_id, display_name, email, password, salt, confirmed, birth, provider, " +
-	"transfer_user_no, transfer_user_id, permission, status, ip, country, " +
+	"transfer_user_no, transfer_user_id, confirm_reset_token, confirm_reset_expire, permission, status, ip, country, " +
 	"create_at, update_at, confirmed_promotion)" +
 	" VALUES (" +
 	"$1, $2, $3, $4, $5, true, '01/01/1900', 'tha'," +
-	"0, $6, 'user', 'normal', '1.1.1.1', 'na'," +
+	"0, $6, $7, $8, 'user', 'normal', '1.1.1.1', 'na'," +
 	"current_timestamp, current_timestamp, false );"
 
 /**
@@ -148,59 +149,67 @@ func runAccountTransfer(th_dbconn, na_dbconn *pgx.Conn) {
 			fmt.Printf("exists the mail: %s\n", thu.Email)
 			// insert conflict table with go routine
 			// if already exists, insert confflit user table
-			insertConflict(thu, na_dbconn)
-
-		} else {
-			// fmt.Printf("%+v\n", thu)
-			// make password
-			// make salt
-			salt, err := generateSalt()
-			if err != nil {
-				fmt.Println("error make salt: ", err)
-				os.Exit(1)
-			}
-			hash, err := generatePassHash(generateRandStringLong(), salt)
-			if err != nil {
-				fmt.Println("error hash salt: ", err)
-				os.Exit(1)
-			}
-			_, err = na_dbconn.Exec(
-				context.Background(),
-				insertSql,
-				generateBigintID(),
-				generateRandString()+"_"+thu.Displayname,
-				strings.ToLower(thu.Email),
-				hash,
-				salt,
-				thu.UId,
-			)
-
-			if err != nil {
-				fmt.Println("error insert: ", err)
-				os.Exit(1)
-			}
-
-			// not exists.
-			// make bulk insert
-			//var preparedNAU PreparedNAUser
-			/*
-				preparedNAUserInfo(&preparedNAU, thu)
-
-				fmt.Printf("%+v\n", preparedNAU)
-
-				// make bulk insert queue
-				batch.Queue(
-					insertSql,
-					preparedNAU.u_id,
-					preparedNAU.display_name,
-					preparedNAU.email,
-					preparedNAU.password,
-					preparedNAU.salt,
-					preparedNAU.transfer_id,
-				)
-				batchRowCount++
-			*/
+			//insertConflict(thu, na_dbconn)
+			thu.Email = "@" + thu.Email
 		}
+		// fmt.Printf("%+v\n", thu)
+		// make password
+		// make salt
+		salt, err := generateSalt()
+		if err != nil {
+			fmt.Println("error make salt: ", err)
+			os.Exit(1)
+		}
+		hash, err := generatePassHash(generateRandStringLong(), salt)
+		if err != nil {
+			fmt.Println("error hash salt: ", err)
+			os.Exit(1)
+		}
+
+		// make email confirm token
+		token, _ := generateToken()
+
+		confirm_reset_token := token
+		confirm_reset_expire := time.Now()
+
+		_, err = na_dbconn.Exec(
+			context.Background(),
+			insertSql,
+			generateBigintID(),
+			generateRandString()+"_"+thu.Displayname,
+			strings.ToLower(thu.Email),
+			hash,
+			salt,
+			thu.UId,
+			confirm_reset_token,
+			confirm_reset_expire,
+		)
+
+		if err != nil {
+			fmt.Println("error insert: ", err)
+			os.Exit(1)
+		}
+
+		// not exists.
+		// make bulk insert
+		//var preparedNAU PreparedNAUser
+		/*
+			preparedNAUserInfo(&preparedNAU, thu)
+
+			fmt.Printf("%+v\n", preparedNAU)
+
+			// make bulk insert queue
+			batch.Queue(
+				insertSql,
+				preparedNAU.u_id,
+				preparedNAU.display_name,
+				preparedNAU.email,
+				preparedNAU.password,
+				preparedNAU.salt,
+				preparedNAU.transfer_id,
+			)
+			batchRowCount++
+		*/
 
 		totlaRowCount++
 		fmt.Printf("count: %d, email: %s\n", totlaRowCount, thu.Email)
@@ -337,4 +346,13 @@ func generatePassHash(password string, salt string) (hash string, err error) {
 	}
 
 	return fmt.Sprintf("%x", h), nil
+}
+
+func generateToken() (string, error) {
+	token, err := uuid.NewV4()
+	if err != nil {
+		return "", err
+	}
+
+	return token.String(), nil
 }
