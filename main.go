@@ -120,7 +120,7 @@ func runAccountTransfer(th_dbconn, na_dbconn *pgx.Conn) {
 	// count: 70193
 
 	//sql := "SELECT \"UID\" as u_id, email, displayname FROM \"user\" where confirmed = true order by create_at asc"
-	sql := "SELECT \"UID\" as u_id, email, displayname FROM \"user\" where create_at >= '2020-08-23 14:02:17.329574+07' and confirmed = true order by create_at asc"
+	sql := "SELECT \"UID\" as u_id, email, displayname FROM \"user\" where create_at > '2020-08-23 14:02:17.329574+07' and confirmed = true order by create_at asc"
 
 	thRows, err := th_dbconn.Query(context.Background(), sql)
 	if err != nil {
